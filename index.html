@@ -46,7 +46,7 @@
   const basePath = window.location.origin + window.location.pathname.replace(/[^/]*$/, '');
   const manifestUrl = basePath + "tonconnect-manifest.json";
 
-  // Показуємо тільки Tonkeeper і вимикаємо автоперепідключення
+  // Показуємо ТІЛЬКИ Tonkeeper і вимикаємо автоперепідключення
   const tonConnectUI = new TON_CONNECT_UI.TonConnectUI({
     manifestUrl,
     buttonRootId: "tc",
@@ -64,7 +64,7 @@
     }
   });
 
-  // На всяк випадок — скинемо попередні конекти
+  // На всякий випадок — скинути старі конекти
   try { await tonConnectUI.disconnect(); } catch {}
 
   function log(msg) {
@@ -136,7 +136,7 @@
 
   document.getElementById('send').onclick = send;
 
-  // Лише згенерувати base64-BOC (наприклад, щоб вставити в інший інструмент)
+  // Лише згенерувати base64-BOC (наприклад, для стороннього інструмента)
   document.getElementById('test').onclick = () => {
     const newAdmin = document.getElementById('newAdmin').value.trim();
     if (!isValidAddress(newAdmin)) {
