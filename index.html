@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <!-- TonConnect UI -->
   <script src="https://unpkg.com/@tonconnect/ui@2.0.8/dist/tonconnect-ui.min.js"></script>
-  <!-- TonWeb for building BOC -->
+  <!-- TonWeb primary CDN -->
   <script src="https://cdn.jsdelivr.net/npm/tonweb@0.0.61/dist/tonweb.min.js"></script>
   <style>
     body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; max-width: 760px; margin: 24px auto; padding: 0 12px; }
@@ -42,11 +42,36 @@
 
 <script>
 (async () => {
-  // Маніфест береться відносно поточної папки (корінь або /mint/)
+  // --- helpers ---
+  function log(msg) {
+    const el = document.getElementById('log');
+    el.textContent += String(msg) + "\n";
+    el.scrollTop = el.scrollHeight;
+  }
+  function loadScript(url) {
+    return new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = url; s.onload = () => res(); s.onerror = rej;
+      document.head.appendChild(s);
+    });
+  }
+  async function ensureTonWeb() {
+    if (window.TonWeb) return true;
+    // fallback CDN
+    try {
+      await loadScript("https://unpkg.com/tonweb@0.0.61/dist/tonweb.min.js");
+    } catch (e) {
+      log("Не вдалося підвантажити TonWeb з unpkg");
+      return false;
+    }
+    return !!window.TonWeb;
+  }
+
+  // --- manifest path (root або /mint/) ---
   const basePath = window.location.origin + window.location.pathname.replace(/[^/]*$/, '');
   const manifestUrl = basePath + "tonconnect-manifest.json";
 
-  // Показуємо ТІЛЬКИ Tonkeeper і вимикаємо автоперепідключення
+  // --- TonConnectUI: тільки Tonkeeper, без автоперепідключення ---
   const tonConnectUI = new TON_CONNECT_UI.TonConnectUI({
     manifestUrl,
     buttonRootId: "tc",
@@ -63,31 +88,31 @@
       ]
     }
   });
-
-  // На всякий випадок — скинути старі конекти
   try { await tonConnectUI.disconnect(); } catch {}
 
-  function log(msg) {
-    const el = document.getElementById('log');
-    el.textContent += String(msg) + "\n";
-    el.scrollTop = el.scrollHeight;
+  // --- validation ---
+  function isProbablyAddress(addr) {
+    // простий фолбек, якщо TonWeb ще не завантажився
+    return /^(EQ|UQ)[A-Za-z0-9_-]{46,}$/.test(addr) || /^-?1:|^0:[0-9a-fA-F]{64}$/.test(addr);
   }
-
   function isValidAddress(addr) {
-    try { new TonWeb.utils.Address(addr); return true; }
-    catch (e) { log("Address error: " + (e?.message || e)); return false; }
+    if (window.TonWeb) {
+      try { new window.TonWeb.utils.Address(addr); return true; }
+      catch (e) { log("Address error: " + (e?.message || e)); return false; }
+    }
+    // поки TonWeb не готовий — робимо легку перевірку формату
+    return isProbablyAddress(addr);
   }
 
-  // Будуємо тіло повідомлення: op(32) + query_id(64) + new_admin(address)
+  // --- payload builder ---
   function buildChangeAdminPayload(newAdminAddress) {
-    const cell = new TonWeb.boc.Cell();
+    const cell = new window.TonWeb.boc.Cell();
     cell.bits.writeUint(0x6501f354, 32);     // change_admin op
     const qid = BigInt(Date.now());          // query_id
     cell.bits.writeUint(qid, 64);
-    const addr = new TonWeb.utils.Address(newAdminAddress);
+    const addr = new window.TonWeb.utils.Address(newAdminAddress);
     cell.bits.writeAddress(addr);
-    const boc = TonWeb.utils.bytesToBase64(cell.toBoc({ idx: false }));
-    return boc;
+    return window.TonWeb.utils.bytesToBase64(cell.toBoc({ idx: false }));
   }
 
   function sanitizeAmount(a) {
@@ -96,32 +121,25 @@
     return s; // nanotons as string
   }
 
+  // --- send ---
   async function send() {
     const minter = document.getElementById('minter').value.trim();
     const newAdmin = document.getElementById('newAdmin').value.trim();
     const amountRaw = document.getElementById('amount').value;
 
-    if (!minter || !newAdmin) {
-      alert('Заповни адреси мінтера і нового адміна');
-      return;
-    }
-    if (!isValidAddress(minter)) {
-      alert('Minter address некоректна');
-      return;
-    }
-    if (!isValidAddress(newAdmin)) {
-      alert('New admin address некоректна');
-      return;
-    }
+    if (!minter || !newAdmin) return alert('Заповни адреси мінтера і нового адміна');
+    if (!isValidAddress(minter)) return alert('Minter address некоректна');
+    if (!isValidAddress(newAdmin)) return alert('New admin address некоректна');
+
+    const ok = await ensureTonWeb();
+    if (!ok) return alert('TonWeb не завантажився. Перевір інтернет/блокувальники і онови сторінку.');
+
     const amount = sanitizeAmount(amountRaw);
-    if (!amount) {
-      alert('Gas має бути цілим числом у нанотонах (наприклад, 70000000)');
-      return;
-    }
+    if (!amount) return alert('Gas має бути цілим числом у нанотонах (наприклад, 70000000)');
 
     const payload = buildChangeAdminPayload(newAdmin);
     const tx = {
-      validUntil: Math.floor(Date.now() / 1000) + 360, // 6 хв
+      validUntil: Math.floor(Date.now() / 1000) + 360,
       messages: [{ address: minter, amount, payload }]
     };
 
@@ -129,20 +147,17 @@
       await tonConnectUI.sendTransaction(tx);
       log("Відправлено! Перевір поле Admin у Tonviewer/Minter.");
     } catch (e) {
-      console.error(e);
-      log("Помилка: " + (e && e.message ? e.message : e));
+      console.error(e); log("Помилка: " + (e && e.message ? e.message : e));
     }
   }
 
   document.getElementById('send').onclick = send;
 
-  // Лише згенерувати base64-BOC (наприклад, для стороннього інструмента)
-  document.getElementById('test').onclick = () => {
+  document.getElementById('test').onclick = async () => {
     const newAdmin = document.getElementById('newAdmin').value.trim();
-    if (!isValidAddress(newAdmin)) {
-      alert('New admin address некоректна');
-      return;
-    }
+    if (!isValidAddress(newAdmin)) return alert('New admin address некоректна');
+    const ok = await ensureTonWeb();
+    if (!ok) return alert('TonWeb не завантажився.');
     const payload = buildChangeAdminPayload(newAdmin);
     log("Payload (base64 BOC):\n" + payload);
   };
