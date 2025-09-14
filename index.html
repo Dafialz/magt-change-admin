@@ -6,8 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <!-- TonConnect UI -->
   <script src="https://unpkg.com/@tonconnect/ui@2.0.8/dist/tonconnect-ui.min.js"></script>
-  <!-- TonWeb primary CDN -->
-  <script src="https://cdn.jsdelivr.net/npm/tonweb@0.0.61/dist/tonweb.min.js"></script>
+  <!-- Не підключаємо CDN TonWeb напряму: тягнемо локально у коді нижче -->
   <style>
     body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; max-width: 760px; margin: 24px auto; padding: 0 12px; }
     label { display:block; margin-top:12px; font-weight:600;}
@@ -42,7 +41,7 @@
 
 <script>
 (async () => {
-  // ---------- helpers ----------
+  // -------- helpers --------
   function log(msg) {
     const el = document.getElementById('log');
     el.textContent += String(msg) + "\n";
@@ -51,26 +50,28 @@
   function loadScript(url) {
     return new Promise((res, rej) => {
       const s = document.createElement('script');
-      s.src = url; s.onload = () => res(); s.onerror = rej;
+      s.src = url; s.onload = () => res(); s.onerror = () => rej(new Error('load fail: ' + url));
       document.head.appendChild(s);
     });
   }
   async function ensureTonWeb() {
     if (window.TonWeb) return true;
-    try {
-      await loadScript("https://unpkg.com/tonweb@0.0.61/dist/tonweb.min.js");
-    } catch (e) {
-      log("Не вдалося підвантажити TonWeb з unpkg");
-      return false;
-    }
+    // 1) локально з твого репо (GitHub Pages) — не блокується Brave
+    try { await loadScript("./tonweb.min.js"); } catch(e) { /* ignore */ }
+    if (window.TonWeb) return true;
+    // 2) fallback CDN #1
+    try { await loadScript("https://cdn.jsdelivr.net/npm/tonweb@0.0.61/dist/tonweb.min.js"); } catch(e) { /* ignore */ }
+    if (window.TonWeb) return true;
+    // 3) fallback CDN #2
+    try { await loadScript("https://unpkg.com/tonweb@0.0.61/dist/tonweb.min.js"); } catch(e) { /* ignore */ }
     return !!window.TonWeb;
   }
 
-  // ---------- manifest path (root або /mint/) ----------
+  // -------- manifest path (root або /mint/) --------
   const basePath = window.location.origin + window.location.pathname.replace(/[^/]*$/, '');
   const manifestUrl = basePath + "tonconnect-manifest.json";
 
-  // ---------- TonConnectUI: тільки Tonkeeper, без автопідключення ----------
+  // -------- TonConnectUI: тільки Tonkeeper --------
   const tonConnectUI = new TON_CONNECT_UI.TonConnectUI({
     manifestUrl,
     buttonRootId: "tc",
@@ -89,16 +90,14 @@
   });
   try { await tonConnectUI.disconnect(); } catch {}
 
-  // ---------- validation (regex only, без TonWeb) ----------
+  // -------- validation (regex only) --------
   function isValidAddress(addr) {
-    // user-friendly EQ/UQ
     const uf = /^(EQ|UQ)[A-Za-z0-9_-]{48,}$/;
-    // raw 0:.. або -1:..
     const raw = /^(-?1|0):[0-9a-fA-F]{64}$/;
     return uf.test(addr) || raw.test(addr);
   }
 
-  // ---------- payload builder ----------
+  // -------- payload builder --------
   function buildChangeAdminPayload(newAdminAddress) {
     const cell = new window.TonWeb.boc.Cell();
     cell.bits.writeUint(0x6501f354, 32);     // change_admin op
@@ -115,7 +114,7 @@
     return s; // nanotons as string
   }
 
-  // ---------- send ----------
+  // -------- send --------
   async function send() {
     const minter = document.getElementById('minter').value.trim();
     const newAdmin = document.getElementById('newAdmin').value.trim();
