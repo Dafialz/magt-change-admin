@@ -25,7 +25,7 @@
   <div id="tc"></div>
 
   <label>Jetton Minter address</label>
-  <input id="minter" value="UQBDooPilphbndrSB1RdtkyZrnWctibsl356IvU7_jOxh4UT" />
+  <input id="minter" value="EQDxQWrZz7v11EqVvtDv1sFLmvK1hNpxrQpvMXhjBasUSXjx" />
 
   <label>New admin address</label>
   <input id="newAdmin" value="UQAZ4VN0UzqZ570GjM3EpDFszzs4zsw8cD8_YfC0M2ca6N17" />
@@ -46,26 +46,26 @@
   const basePath = window.location.origin + window.location.pathname.replace(/[^/]*$/, '');
   const manifestUrl = basePath + "tonconnect-manifest.json";
 
-  // Показуємо тільки Tonkeeper і вимикаємо автоперепідключення до попереднього гаманця
+  // Показуємо тільки Tonkeeper і вимикаємо автоперепідключення
   const tonConnectUI = new TON_CONNECT_UI.TonConnectUI({
     manifestUrl,
     buttonRootId: "tc",
     restoreConnection: false,
-    walletsListConfiguration: {
+    walletsList: {
       includeWallets: [
         {
           appName: "tonkeeper",
           name: "Tonkeeper",
           bridgeUrl: "https://bridge.tonapi.io/bridge",
-          iconUrl: "https://tonkeeper.com/assets/tonconnect-icon.png"
+          universalLink: "https://app.tonkeeper.com/ton-connect",
+          deepLink: "tonkeeper://ton-connect"
         }
-      ],
-      excludeWallets: [] // нічого не виключаємо, ми явно включили тільки Tonkeeper
+      ]
     }
   });
 
-  // На всяк випадок — якщо щось кешувалося раніше
-  try { await tonConnectUI.disconnect(); } catch (e) {}
+  // На всяк випадок — скинемо попередні конекти
+  try { await tonConnectUI.disconnect(); } catch {}
 
   function log(msg) {
     const el = document.getElementById('log');
@@ -74,7 +74,8 @@
   }
 
   function isValidAddress(addr) {
-    try { new TonWeb.utils.Address(addr); return true; } catch { return false; }
+    try { new TonWeb.utils.Address(addr); return true; }
+    catch (e) { log("Address error: " + (e?.message || e)); return false; }
   }
 
   // Будуємо тіло повідомлення: op(32) + query_id(64) + new_admin(address)
