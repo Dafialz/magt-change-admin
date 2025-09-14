@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <!-- TonConnect UI -->
   <script src="https://unpkg.com/@tonconnect/ui@2.0.8/dist/tonconnect-ui.min.js"></script>
-  <!-- TonWeb не підключаємо тут; далі підвантажимо локально -->
+  <!-- TonWeb підвантажимо локально у скрипті -->
   <style>
     body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; max-width: 760px; margin: 24px auto; padding: 0 12px; }
     label { display:block; margin-top:12px; font-weight:600;}
@@ -37,14 +37,14 @@
     <button id="test">Build payload only</button>
   </div>
 
-  <pre id="log"></pre>
+  <pre id="log">build v9 loaded</pre>
 
 <script>
 (async () => {
   // -------- helpers --------
   function log(msg) {
     const el = document.getElementById('log');
-    el.textContent += String(msg) + "\n";
+    el.textContent += "\n" + String(msg);
     el.scrollTop = el.scrollHeight;
   }
   function loadScript(url) {
@@ -56,22 +56,17 @@
   }
   async function ensureTonWeb() {
     if (window.TonWeb) return true;
-    // 1) локально з твого GitHub Pages (поклади tonweb.min.js у корінь репо!)
     try { await loadScript("./tonweb.min.js"); } catch(e) {}
     if (window.TonWeb) return true;
-    // 2) fallback CDN #1
     try { await loadScript("https://cdn.jsdelivr.net/npm/tonweb@0.0.61/dist/tonweb.min.js"); } catch(e) {}
     if (window.TonWeb) return true;
-    // 3) fallback CDN #2
     try { await loadScript("https://unpkg.com/tonweb@0.0.61/dist/tonweb.min.js"); } catch(e) {}
     return !!window.TonWeb;
   }
 
-  // -------- manifest path (root або /mint/) --------
   const basePath = window.location.origin + window.location.pathname.replace(/[^/]*$/, '');
   const manifestUrl = basePath + "tonconnect-manifest.json";
 
-  // -------- TonConnectUI: тільки Tonkeeper --------
   const tonConnectUI = new TON_CONNECT_UI.TonConnectUI({
     manifestUrl,
     buttonRootId: "tc",
@@ -90,18 +85,17 @@
   });
   try { await tonConnectUI.disconnect(); } catch {}
 
-  // -------- validation (regex only; friendly EQ/UQ = 48 символів загалом) --------
+  // правильний regex: EQ/UQ + 46..50 символів
   function isValidAddress(addr) {
-    const uf = /^(EQ|UQ)[A-Za-z0-9_-]{46,50}$/;   // 2 префікс + 46..50 решта
+    const uf = /^(EQ|UQ)[A-Za-z0-9_-]{46,50}$/;
     const raw = /^(-?1|0):[0-9a-fA-F]{64}$/;
     return uf.test(addr) || raw.test(addr);
   }
 
-  // -------- payload builder --------
   function buildChangeAdminPayload(newAdminAddress) {
     const cell = new window.TonWeb.boc.Cell();
-    cell.bits.writeUint(0x6501f354, 32);     // change_admin op
-    const qid = BigInt(Date.now());          // query_id
+    cell.bits.writeUint(0x6501f354, 32);
+    const qid = BigInt(Date.now());
     cell.bits.writeUint(qid, 64);
     const addr = new window.TonWeb.utils.Address(newAdminAddress);
     cell.bits.writeAddress(addr);
@@ -111,17 +105,16 @@
   function sanitizeAmount(a) {
     const s = String(a).trim();
     if (!/^\d+$/.test(s)) return null;
-    return s; // nanotons as string
+    return s;
   }
 
-  // -------- send --------
   async function send() {
     const minter = document.getElementById('minter').value.trim();
     const newAdmin = document.getElementById('newAdmin').value.trim();
     const amountRaw = document.getElementById('amount').value;
 
     if (!minter || !newAdmin) return alert('Заповни адреси мінтера і нового адміна');
-    if (!isValidAddress(minter)) return alert('Minter address некоректна');
+    if (!isValidAddress(minter))  return alert('Minter address некоректна');
     if (!isValidAddress(newAdmin)) return alert('New admin address некоректна');
 
     const ok = await ensureTonWeb();
